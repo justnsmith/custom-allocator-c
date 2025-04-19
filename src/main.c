@@ -11,5 +11,8 @@ int main() {
         printf("root[%d] = %d\n", i, root[i]);
     }
 
+    heap_free(root);
+    root = NULL;
+
     return 0;
 }
