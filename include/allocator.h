@@ -7,14 +7,15 @@
 #define HEAP_CAPACITY 640000
 #define ALIGNMENT 16
 
-typedef struct {
+typedef struct BlockHeader {
     size_t size;
     bool free;
-    void* next;
+    struct BlockHeader* next;
 } BlockHeader;
 
 size_t align(size_t alloc_size);
 void* heap_alloc(size_t requested_bytes);
 void heap_free(void* block_ptr);
+void print_heap();
 
 #endif // ALLOCATOR_H

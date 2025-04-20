@@ -6,6 +6,8 @@
 char heap[HEAP_CAPACITY] = { 0 };
 size_t heap_size = 0;
 
+BlockHeader* first_block = NULL;
+
 size_t align(size_t alloc_size) {
     if (alloc_size % ALIGNMENT != 0) {
         alloc_size += ALIGNMENT - (alloc_size % ALIGNMENT);
@@ -15,51 +17,76 @@ size_t align(size_t alloc_size) {
 
 void* heap_alloc(size_t requested_bytes) {
     size_t total_size = requested_bytes + sizeof(BlockHeader);
-    requested_bytes = align(total_size);
-    heap_size = align(heap_size);
+    total_size = align(total_size);
 
     assert(heap_size + total_size <= HEAP_CAPACITY);
 
-    BlockHeader* curr = (BlockHeader*) heap;
+    void* result = heap + heap_size;
+
+    BlockHeader* curr = first_block;
+
+    if (curr == NULL) {
+        curr = (BlockHeader*) result;
+        curr->size = total_size;
+        curr->free = false;
+        curr->next = NULL;
+        first_block = curr;
+    }
+    else {
+        while (curr->next != NULL) {
+            curr = curr->next;
+        }
+        BlockHeader* new_block = (BlockHeader*) result;
+        new_block->size = total_size;
+        new_block->free = false;
+        new_block->next = NULL;
+        curr->next = new_block;
+        curr = new_block;
+    }
+    heap_size += total_size;
+
+    printf("Allocated %zu bytes at %p\n", total_size, result);
+    assert(((uintptr_t)result % ALIGNMENT) == 0);
+
+    return (void *)(curr + 1);
+}
+
+void heap_free(void* block_ptr) {
+    if (block_ptr == NULL) return;
+
+    BlockHeader* header = (BlockHeader*)block_ptr - 1;
+    printf("%p\n", header);
+    header->free = true;
+
+    // Forward Coalescing
+    if (header->next != NULL && header->next->free == true) {
+        BlockHeader* next = header->next;
+        header->size += next->size;
+        header->next = next->next;
+        printf("(FORWARD): Coalesced into size %zu\n", header->size);
+    }
+
+    // Backward Coalescing
+    BlockHeader* curr = first_block;
     BlockHeader* prev = NULL;
 
-    while((char *) curr < heap + heap_size && curr->next != NULL) {
-        if (curr->free == true && curr->size >= requested_bytes) {
-            curr->free = false;
-            return (void *) (curr + 1);
-        }
+    while (curr != NULL && curr != header) {
         prev = curr;
         curr = curr->next;
     }
 
-    void* result = heap + heap_size;
-    BlockHeader* header = (BlockHeader*) result;
-    heap_size += total_size;
-
-    header->size = requested_bytes;
-    header->free = false;
-    header->next = NULL;
-
-    if (prev != NULL) {
-        prev->next = header;
+    if (prev != NULL && prev->free == true) {
+        prev->size += header->size;
+        prev->next = header->next;
+        printf("(BACKWARD): Coalesced into size %zu\n", prev->size);
     }
-
-    printf("Allocated %zu bytes at %p\n", requested_bytes, result);
-    assert(((uintptr_t)result % ALIGNMENT) == 0);
-
-    return (void *)(header + 1);
 }
 
-void heap_free(void* block_ptr) {
-    if (block_ptr == NULL) {
-        return;
+void print_heap() {
+    BlockHeader* curr = first_block;
+    int i = 0;
+    while (curr) {
+        printf("Block %d — Size: %zu | Free: %d | Addr: %p\n", i++, curr->size, curr->free, (void*)curr);
+        curr = curr->next;
     }
-
-    if ((char *)block_ptr < heap || (char *)block_ptr > heap + heap_size) {
-        printf("Pointer is out of bounds.\n");
-        return;
-    }
-
-    BlockHeader* header = (BlockHeader*) block_ptr - 1;
-    header->free = true;
 }
