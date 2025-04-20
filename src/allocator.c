@@ -4,9 +4,10 @@
 #include <string.h>
 #include "allocator.h"
 
-char heap[HEAP_CAPACITY] = {0};  // heap storage
-size_t heap_size = 0;            // tracks heap size
-BlockHeader* first_block = NULL; // first heap block
+char heap[HEAP_CAPACITY] = {0};                  // heap storage
+size_t heap_size = 0;                            // tracks heap size
+BlockHeader* first_block = NULL;                 // first heap block
+AllocationStrategy current_strategy = FIRST_FIT; // default strategy
 
 /**
  * @brief Aligns a given memory size to the nearest multiple of the alignment value.
@@ -29,6 +30,53 @@ size_t align(size_t alloc_size) {
     return alloc_size;
 }
 
+void* find_fit_first(size_t requested_size) {
+    BlockHeader* curr_block = first_block;
+    while (curr_block != NULL) {
+        if (curr_block->free == true && curr_block->size >= requested_size) {
+            return (void *)(curr_block + 1);
+        }
+        curr_block = curr_block->next;
+    }
+    return NULL;
+}
+
+void* find_fit_best(size_t requested_size) {
+    BlockHeader* curr_block = first_block;
+    BlockHeader* best_block = NULL;
+
+    while (curr_block != NULL) {
+        if (curr_block->free == true && curr_block->size >= requested_size) {
+            if (best_block == NULL) {
+                best_block = curr_block;
+            }
+            else if (best_block->size > curr_block->size) {
+                best_block = curr_block;
+            }
+        }
+        curr_block = curr_block->next;
+    }
+    return best_block ? (void*)(best_block + 1) : NULL;
+}
+
+void* find_fit_worst(size_t requested_size) {
+    BlockHeader* curr_block = first_block;
+    BlockHeader* worst_block = NULL;
+
+    while (curr_block != NULL) {
+        if (curr_block->free == true && curr_block->size >= requested_size) {
+            if (worst_block == NULL) {
+                worst_block = curr_block;
+            }
+            else if (worst_block->size < curr_block->size) {
+                worst_block = curr_block;
+            }
+        }
+        curr_block = curr_block->next;
+    }
+    return worst_block ? (void*)(worst_block + 1) : NULL;
+}
+
 /**
  * @brief Allocates the requested number of bytes onto the heap if there is room.
  *
@@ -49,55 +97,61 @@ size_t align(size_t alloc_size) {
  *       allocation request.
  */
 void* heap_alloc(size_t requested_bytes) {
-    size_t total_size = requested_bytes + sizeof(BlockHeader);
-    total_size = align(total_size);
+    size_t total_size = align(requested_bytes + sizeof(BlockHeader));
+    void* found = NULL;
 
-    BlockHeader* curr = first_block;
+    switch (current_strategy) {
+        case FIRST_FIT:
+            found = find_fit_first(total_size);
+            break;
+        case BEST_FIT:
+            found = find_fit_best(total_size);
+            break;
+        case WORST_FIT:
+            found = find_fit_worst(total_size);
+            break;
+    }
 
-    // Try to find a free block that is large enough to fit 'total_size'
-    while (curr != NULL) {
-        if (curr->free == true && curr->size >= total_size) {
-            // If the block is large enough, check if it can be split.
-            if (curr->size >= total_size + sizeof(BlockHeader) + ALIGNMENT) {
-               split_block(curr, total_size);
-            }
-            else {
-                curr->free = false;
-            }
-            printf("Reused block at %p (%zu bytes)\n", curr, curr->size);
-            return (void*)(curr + 1);
+    if (found != NULL) {
+        BlockHeader* block = (BlockHeader*) found - 1;
+
+        if (block->size >= total_size + sizeof(BlockHeader) + ALIGNMENT) {
+            split_block(block, total_size);
         }
-        curr = curr->next;
+        else {
+            block->free = false;
+        }
+        printf("Reused block at %p (%zu bytes)\n", block, block->size);
+        return found;
     }
 
     // If there are no suitable free blocks, create a new block at the end of heap.
-    assert(heap_size + total_size <= HEAP_CAPACITY); // Makes sure there is enough space in heap.
+    assert(heap_size + total_size <= HEAP_CAPACITY); // Ensure enough space in heap.
 
-    void* result = heap + heap_size; // Address where new block will be allocated.
+    void* result = heap + heap_size; // Address where the new block will be allocated.
 
-    // Create and initalize the new block
+    // Create and initialize the new block
     BlockHeader* new_block = (BlockHeader*) result;
     new_block->size = total_size;
     new_block->free = false;
     new_block->next = NULL;
 
-    // If this is the first block, set it as the first block in the heap.
+    // If the heap is empty, set the first block.
     if (first_block == NULL) {
-        first_block = new_block;
-        // Else, find the last block and add the new block to the end of the list.
+        first_block = new_block; // Set the first block if heap is empty
     } else {
-        curr = first_block;
-        while (curr->next != NULL) {
-            curr = curr->next;
+        BlockHeader* curr_block = first_block;
+        while (curr_block->next != NULL) {
+            curr_block = curr_block->next;
         }
-        curr->next = new_block;
+        curr_block->next = new_block;
     }
 
     // Update the total heap size
     heap_size += total_size;
 
     printf("Allocated new block of %zu bytes at %p\n", total_size, result);
-    assert(((uintptr_t) result % ALIGNMENT) == 0); // Check that the block is properly aligned
+    assert(((uintptr_t) result % ALIGNMENT) == 0); // Ensure the block is properly aligned
 
     return (void*)(new_block + 1);
 }

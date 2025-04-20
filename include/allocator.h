@@ -22,6 +22,16 @@ typedef struct BlockHeader {
     struct BlockHeader* next;
 } BlockHeader;
 
+typedef enum {
+    FIRST_FIT,
+    BEST_FIT,
+    WORST_FIT,
+} AllocationStrategy;
+
+extern BlockHeader* first_block;
+extern size_t heap_size;
+extern AllocationStrategy current_strategy;
+
 /**
  * @brief Aligns the given size to the nearest multiple of ALIGNMENT.
  *
