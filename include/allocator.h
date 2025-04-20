@@ -40,9 +40,6 @@ extern AllocationStrategy current_strategy;
 extern pthread_mutex_t heap_mutex;
 
 size_t align(size_t alloc_size);
-void set_last_status(AllocatorStatus status);
-AllocatorStatus get_last_status();
-
 void coalesce_blocks(BlockHeader* header);
 void* split_block(BlockHeader* block_ptr, size_t total_size);
 
@@ -62,11 +59,15 @@ bool check_heap_integrity();
 bool validate_pointer(void* ptr);
 void defragment_heap();
 
+void set_last_status(AllocatorStatus status);
+void set_allocation_strategy(AllocationStrategy strategy);
+
 size_t get_alloc_count();
 size_t get_free_block_count();
 size_t get_used_heap_size();
 size_t get_free_heap_size();
 double get_fragmentation_ratio();
+AllocatorStatus get_last_status();
 
 void print_heap();
 void save_heap_state(const char* filename);

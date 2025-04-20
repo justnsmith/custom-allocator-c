@@ -3,12 +3,12 @@
 #include <string.h>
 #include "allocator.h"
 
-char heap[HEAP_CAPACITY] = {0};                  // heap storage
-size_t heap_size = 0;                            // tracks heap size
-BlockHeader* first_block = NULL;                 // first heap block
-AllocationStrategy current_strategy = FIRST_FIT; // default strategy
-pthread_mutex_t heap_mutex = PTHREAD_MUTEX_INITIALIZER;
-static AllocatorStatus last_status = ALLOC_SUCCESS;
+char heap[HEAP_CAPACITY] = {0};                         // heap storage
+size_t heap_size = 0;                                   // tracks heap size
+BlockHeader* first_block = NULL;                        // first heap block
+AllocationStrategy current_strategy = FIRST_FIT;        // default strategy
+pthread_mutex_t heap_mutex = PTHREAD_MUTEX_INITIALIZER; // mutex initializer
+static AllocatorStatus last_status = ALLOC_SUCCESS;     // default status code
 
 size_t align(size_t alloc_size) {
     if (alloc_size % ALIGNMENT != 0) {
@@ -17,12 +17,59 @@ size_t align(size_t alloc_size) {
     return alloc_size;
 }
 
-void set_last_status(AllocatorStatus status) {
-    last_status = status;
+void coalesce_blocks(BlockHeader* header) {
+    // Forward Coalescing
+    while (header->next != NULL && header->next->free == true) {
+        BlockHeader* next = header->next;
+        header->size += next->size;
+        header->next = next->next;
+        printf("(FORWARD): Coalesced into size %zu\n", header->size);
+    }
+
+    // Backward Coalescing
+    BlockHeader* curr = first_block;
+    BlockHeader* prev = NULL;
+
+    while (curr != NULL && curr != header) {
+        prev = curr;
+        curr = curr->next;
+    }
+
+    if (prev != NULL && prev->free == true) {
+        prev->size += header->size;
+        prev->next = header->next;
+        printf("(BACKWARD): Coalesced into size %zu\n", prev->size);
+    }
 }
 
-AllocatorStatus get_last_status() {
-    return last_status;
+void* split_block(BlockHeader* block_ptr, size_t total_size) {
+    pthread_mutex_lock(&heap_mutex);
+    if (block_ptr == NULL || validate_pointer((void*)(block_ptr + 1)) == false) {
+        pthread_mutex_unlock(&heap_mutex);
+        set_last_status(ALLOC_INVALID_OPERATION);
+        return NULL;
+    }
+
+    if (block_ptr->size < total_size + sizeof(BlockHeader) + ALIGNMENT) {
+        pthread_mutex_unlock(&heap_mutex);
+        set_last_status(ALLOC_ERROR);
+        return NULL;
+    }
+
+    // Calculate the address of the new free block after the allocated block
+    BlockHeader* secondBox = (BlockHeader*)((char*) block_ptr + total_size);
+    secondBox->size = block_ptr->size - total_size; // Remaining size
+    secondBox->free = true;                         // Mark as free
+    secondBox->next = block_ptr->next;              // Link the rest of the list
+
+    // Update original block to reflect the allocated block
+    block_ptr->size = total_size;
+    block_ptr->next = secondBox;
+    block_ptr->free = false;
+
+    pthread_mutex_unlock(&heap_mutex);
+    set_last_status(ALLOC_SUCCESS);
+    return (void*)(block_ptr + 1);
 }
 
 void* find_fit_first(size_t requested_size) {
@@ -85,31 +132,6 @@ void* find_fit_worst(size_t requested_size) {
     else {
         set_last_status(ALLOC_OUT_OF_MEMORY);
         return NULL;
-    }
-}
-
-void coalesce_blocks(BlockHeader* header) {
-    // Forward Coalescing
-    while (header->next != NULL && header->next->free == true) {
-        BlockHeader* next = header->next;
-        header->size += next->size;
-        header->next = next->next;
-        printf("(FORWARD): Coalesced into size %zu\n", header->size);
-    }
-
-    // Backward Coalescing
-    BlockHeader* curr = first_block;
-    BlockHeader* prev = NULL;
-
-    while (curr != NULL && curr != header) {
-        prev = curr;
-        curr = curr->next;
-    }
-
-    if (prev != NULL && prev->free == true) {
-        prev->size += header->size;
-        prev->next = header->next;
-        printf("(BACKWARD): Coalesced into size %zu\n", prev->size);
     }
 }
 
@@ -282,32 +304,6 @@ void* thread_safe_realloc(void* ptr, size_t new_size) {
     return new_ptr;
 }
 
-void* split_block(BlockHeader* block_ptr, size_t total_size) {
-    if (block_ptr == NULL || validate_pointer((void*)(block_ptr + 1)) == false) {
-        set_last_status(ALLOC_INVALID_OPERATION);
-        return NULL;
-    }
-
-    if (block_ptr->size < total_size + sizeof(BlockHeader) + ALIGNMENT) {
-        set_last_status(ALLOC_ERROR);
-        return NULL;
-    }
-
-    // Calculate the address of the new free block after the allocated block
-    BlockHeader* secondBox = (BlockHeader*)((char*) block_ptr + total_size);
-    secondBox->size = block_ptr->size - total_size; // Remaining size
-    secondBox->free = true;                         // Mark as free
-    secondBox->next = block_ptr->next;              // Link the rest of the list
-
-    // Update original block to reflect the allocated block
-    block_ptr->size = total_size;
-    block_ptr->next = secondBox;
-    block_ptr->free = false;
-
-    set_last_status(ALLOC_SUCCESS);
-    return (void*)(block_ptr + 1);
-}
-
 bool check_heap_integrity() {
     pthread_mutex_lock(&heap_mutex);
 
@@ -367,9 +363,11 @@ bool check_heap_integrity() {
 }
 
 bool validate_pointer(void* ptr) {
+    pthread_mutex_lock(&heap_mutex);
     uintptr_t start = (uintptr_t) heap;
     uintptr_t end   = (uintptr_t) heap_size;
     uintptr_t p     = (uintptr_t) ptr;
+    pthread_mutex_unlock(&heap_mutex);
     return (p >= start && p < start + end);
 }
 
@@ -385,6 +383,18 @@ void defragment_heap() {
             curr_block = curr_block->next;
         }
     }
+    pthread_mutex_unlock(&heap_mutex);
+}
+
+void set_last_status(AllocatorStatus status) {
+    pthread_mutex_lock(&heap_mutex);
+    last_status = status;
+    pthread_mutex_unlock(&heap_mutex);
+}
+
+void set_allocation_strategy(AllocationStrategy strategy) {
+    pthread_mutex_lock(&heap_mutex);
+    current_strategy = strategy;
     pthread_mutex_unlock(&heap_mutex);
 }
 
@@ -468,6 +478,14 @@ double get_fragmentation_ratio() {
 
     double avg_free_block_size = (double)total_free_size / free_block_count;
     return avg_free_block_size / total_free_size;
+}
+
+
+AllocatorStatus get_last_status() {
+    pthread_mutex_lock(&heap_mutex);
+    AllocatorStatus status = last_status;
+    pthread_mutex_unlock(&heap_mutex);
+    return status;
 }
 
 void print_heap() {
