@@ -34,7 +34,7 @@ void* find_fit_first(size_t requested_size);
 void* find_fit_best(size_t requested_size);
 void* find_fit_worst(size_t requested_size);
 
-void coalesce_blocks(BlockHeader* firstBlock, BlockHeader* secondBlock); // Not done
+void coalesce_blocks(BlockHeader* header);
 
 void* thread_safe_alloc(size_t requested_bytes);                         // Not done
 void* heap_alloc(size_t requested_bytes);
@@ -47,13 +47,13 @@ void* heap_realloc(void* ptr, size_t new_size);
 
 void* split_block(BlockHeader* block_ptr, size_t total_size);
 
-bool check_heap_integrity();                                             // Not done
-bool validate_pointer(void* ptr);                                        // Not done
+bool check_heap_integrity();
+bool validate_pointer(void* ptr);
 void defragment_heap();                                                  // Not done
 
-size_t get_alloc_count();                                                // Not done
-size_t get_free_block_count();                                           // Not done
-size_t get_used_heap_size();                                             // Not done
-void print_heap();                                                       // Will improve
+size_t get_alloc_count();
+size_t get_free_block_count();
+size_t get_used_heap_size();
+void print_heap();
 
 #endif // ALLOCATOR_H
