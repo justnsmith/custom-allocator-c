@@ -16,6 +16,8 @@ typedef struct BlockHeader {
 size_t align(size_t alloc_size);
 void* heap_alloc(size_t requested_bytes);
 void heap_free(void* block_ptr);
+void* heap_realloc(void* block_ptr, size_t new_size);
+void* split_block(BlockHeader* block_ptr, size_t total_size);
 void print_heap();
 
 #endif // ALLOCATOR_H
