@@ -1,19 +1,31 @@
+/**
+ * @file allocator_test.c
+ * @brief Unit tests for a simple memory allocator.
+ *
+ * This file contains a series of unit tests to validate the functionality
+ * of a custom memory allocator. The tests cover basic allocation,
+ * deallocation, reallocation, and various edge cases. The tests also
+ * include performance benchmarks and checks for memory leaks.
+ * The allocator supports different allocation strategies (first-fit,
+ * best-fit, worst-fit) and provides functions for memory management,
+ * including allocation, deallocation, reallocation, and heap integrity checks.
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
 #include <time.h>
-#include <assert.h>
 #include "allocator.h"
 
+// ANSI color codes for colored console output.
 #define ANSI_COLOR_RED     "\x1b[31m"
 #define ANSI_COLOR_GREEN   "\x1b[32m"
 #define ANSI_COLOR_YELLOW  "\x1b[33m"
-#define ANSI_COLOR_BLUE    "\x1b[34m"
 #define ANSI_COLOR_MAGENTA "\x1b[35m"
-#define ANSI_COLOR_CYAN    "\x1b[36m"
 #define ANSI_COLOR_RESET   "\x1b[0m"
 
+// Macros for test output formatting.
 #define TEST_START() printf(ANSI_COLOR_YELLOW "[STARTING] " ANSI_COLOR_RESET "%s\n", __func__)
 #define TEST_PASSED() printf(ANSI_COLOR_GREEN "[PASSED] " ANSI_COLOR_RESET "%s\n", __func__)
 #define TEST_FAILED() do { \
@@ -22,6 +34,8 @@
 } while (0)
 
 // Helper functions
+
+// Ressets the allocator to a clean inital state.
 void reset_allocator() {
     memset(heap, 0, HEAP_CAPACITY);
     heap_size = 0;
@@ -30,11 +44,14 @@ void reset_allocator() {
     set_last_status(ALLOC_SUCCESS);
 }
 
+// Verifies that the given pointer was successfully allocated
+// and that the block has the expected size.
 bool verify_allocation(void *ptr, size_t expected_size) {
     if (ptr == NULL) return false;
 
     BlockHeader *header = (BlockHeader*)ptr - 1;
 
+    // CHeck that the block is marked as not free and that it has enough space
     if (header->free != false || header->size < expected_size + sizeof(BlockHeader)) {
         return false;
     }
@@ -44,10 +61,12 @@ bool verify_allocation(void *ptr, size_t expected_size) {
 }
 
 // Basic Functionality Tests
+
+// Test basic allocation, memory access, and deallocation.
 void test_basic_allocation() {
     reset_allocator();
 
-    // Allocate a simple block
+    // Allocate a simple block of 100 bytes
     void* ptr = heap_alloc(100);
     if (ptr == NULL) {
         TEST_FAILED();
@@ -55,7 +74,7 @@ void test_basic_allocation() {
 
     if (!verify_allocation(ptr, 100)) TEST_FAILED();
 
-    // Check that we can write to and read from it
+    // Write to entire block and verify contents
     memset(ptr, 'A', 100);
     for (int i = 0; i < 100; i++) {
         if (((char*)ptr)[i] != 'A') TEST_FAILED();
@@ -67,6 +86,7 @@ void test_basic_allocation() {
     TEST_PASSED();
 }
 
+// Test allocatoin of multiple blocks, data integrity, and deallocation.
 void test_multiple_allocations() {
     reset_allocator();
 
@@ -98,6 +118,8 @@ void test_multiple_allocations() {
     TEST_PASSED();
 }
 
+// Test allocating a block that nearly fills the heap and make sure no
+// over-allocation happens.
 void test_allocation_at_capacity() {
     reset_allocator();
 
@@ -120,6 +142,7 @@ void test_allocation_at_capacity() {
     TEST_PASSED();
 }
 
+// Test reallocting memory blocks to both larger and smaller sizes.
 void test_reallocation() {
     reset_allocator();
 
@@ -157,6 +180,8 @@ void test_reallocation() {
 }
 
 // Edge Cases Tests
+
+// Test allocating 0 bytes and freeing a NULL pointer.
 void test_zero_allocation() {
     reset_allocator();
 
@@ -170,6 +195,7 @@ void test_zero_allocation() {
     TEST_PASSED();
 }
 
+// Test allocating a large block (half the heap) and freeing it.
 void test_large_allocation() {
     reset_allocator();
 
@@ -184,6 +210,7 @@ void test_large_allocation() {
     TEST_PASSED();
 }
 
+// Test allocating a block larger than the heap size
 void test_too_large_allocation() {
     reset_allocator();
 
@@ -195,6 +222,7 @@ void test_too_large_allocation() {
     TEST_PASSED();
 }
 
+// Test that the allocator respects alignment requirements.
 void test_alignment() {
     reset_allocator();
 
@@ -215,15 +243,19 @@ void test_alignment() {
     TEST_PASSED();
 }
 
+// Create high fragmentation and verify fragmentation ratio stays low.
 void test_maximum_fragmentation() {
     reset_allocator();
 
     void* ptrs[100];
+
+    // Allocate 100 blocks of 64 bytes
     for (int i = 0; i < 100; i++) {
         ptrs[i] = heap_alloc(64);
         if (ptrs[i] == NULL) TEST_FAILED();
     }
 
+    // Free every block to simulate fragmentation
     for (int i = 0; i < 100; i += 2) {
         heap_free(ptrs[i]);
     }
@@ -240,6 +272,8 @@ void test_maximum_fragmentation() {
 }
 
 // Error Handling Tests
+
+// Test freeing a NULL pointer and a pointer not from our heap.
 void test_invalid_free() {
     reset_allocator();
 
@@ -255,6 +289,7 @@ void test_invalid_free() {
     TEST_PASSED();
 }
 
+// Test freeing a pointer that was not allocated by our allocator.
 void test_double_free() {
     reset_allocator();
 
@@ -265,13 +300,13 @@ void test_double_free() {
     heap_free(ptr);
     if (get_last_status() != ALLOC_SUCCESS) TEST_FAILED();
 
-    // This should mark the block as free but not cause an error
-    // since we're just changing a flag
     heap_free(ptr);
+    if (get_last_status() != ALLOC_INVALID_FREE) TEST_FAILED();
 
     TEST_PASSED();
 }
 
+// Test using memory after it has been freed.
 void test_use_after_free() {
     reset_allocator();
 
@@ -288,6 +323,7 @@ void test_use_after_free() {
     TEST_PASSED();
 }
 
+// Test heap integrity after various operations.
 void test_heap_integrity() {
     reset_allocator();
 
@@ -311,100 +347,106 @@ void test_heap_integrity() {
 }
 
 // Allocation Strategies Tests
+
+// Test first-fit strategy by creating a specific allocation pattern.
 void test_first_fit_strategy() {
     reset_allocator();
     set_allocation_strategy(FIRST_FIT);
 
     // Create a situation where first-fit makes a specific choice
-    void* blk1 = heap_alloc(200);
-    void* blk2 = heap_alloc(200);
-    void* blk3 = heap_alloc(200);
+    void* ptr1 = heap_alloc(200);
+    void* ptr2 = heap_alloc(200);
+    void* ptr3 = heap_alloc(200);
 
     // Free the middle block
-    heap_free(blk2);
+    heap_free(ptr2);
 
     // Allocate a smaller block - should use the middle free block
-    void* blk4 = heap_alloc(100);
-    BlockHeader* header4 = (BlockHeader*)blk4 - 1;
+    void* ptr4 = heap_alloc(100);
+    BlockHeader* ptr4_header = (BlockHeader*)ptr4 - 1;
 
     // In first-fit, this should be placed in the first free block (where blk2 was)
-    if ((void*)header4 < blk1 || (void*)header4 >= blk3) TEST_FAILED();
+    if ((void*)ptr4_header < ptr1 || (void*)ptr4_header >= ptr3) TEST_FAILED();
 
-    heap_free(blk1);
-    heap_free(blk3);
-    heap_free(blk4);
+    heap_free(ptr1);
+    heap_free(ptr3);
+    heap_free(ptr4);
 
     TEST_PASSED();
 }
 
+// Test best-fit strategy by creating a specific allocation pattern.
 void test_best_fit_strategy() {
     reset_allocator();
     set_allocation_strategy(BEST_FIT);
 
     // Create allocated blocks (some to free, some as spacers)
-    void* blk1 = heap_alloc(400);     // will be freed (400-byte hole)
+    void* ptr1 = heap_alloc(400);     // will be freed (400-byte hole)
     void* spacer1 = heap_alloc(400);  // spacer to prevent coalescing
-    void* blk2 = heap_alloc(300);     // will be shrunk to create smaller hole
+    void* ptr2 = heap_alloc(300);     // will be shrunk to create smaller hole
     void* spacer2 = heap_alloc(400);  // spacer to prevent coalescing
-    void* blk3 = heap_alloc(400);     // will be freed (400-byte hole)
-    void* blk4 = heap_alloc(400);     // stay allocated
+    void* ptr3 = heap_alloc(400);     // will be freed (400-byte hole)
+    void* ptr4 = heap_alloc(400);     // stay allocated
 
     // Free blk1 and blk3 to create 400-byte hole
-    heap_free(blk1);
-    heap_free(blk2);
-    heap_free(blk3);
-    heap_free(blk4);
+    heap_free(ptr1);
+    heap_free(ptr2);
+    heap_free(ptr3);
+    heap_free(ptr4);
 
     // Now allocate 200 bytes — BEST_FIT should choose the smallest suitable hole,
     // which is the ~100-byte leftover from blk2's realloc (likely ~104 due to alignment)
-    void* test_blk2 = heap_alloc(200);
+    void* test_ptr2 = heap_alloc(200);
 
     // Assertion ensures it's within the region formerly held by blk2
-    if ((void*)test_blk2 < (void*)blk2 || (void*)test_blk2 >= (void*)spacer2) TEST_FAILED();
+    if ((void*)test_ptr2 < (void*)ptr2 || (void*)test_ptr2 >= (void*)spacer2) TEST_FAILED();
 
     // Cleanup
-    heap_free(test_blk2);
+    heap_free(test_ptr2);
     heap_free(spacer1);
     heap_free(spacer2);
 
     TEST_PASSED();
 }
 
+// Test worst-fit strategy by creating a specific allocation pattern.
 void test_worst_fit_strategy() {
     reset_allocator();
     set_allocation_strategy(WORST_FIT);
 
     // Create holes of different sizes
-    void* blk1 = heap_alloc(200);
+    void* ptr1 = heap_alloc(200);
     void* spacer1 = heap_alloc(400);  // spacer to prevent coalescing
-    void* blk2 = heap_alloc(400);
+    void* ptr2 = heap_alloc(400);
     void* spacer2 = heap_alloc(400);  // spacer to prevent coalescing
-    void* blk3 = heap_alloc(600);
+    void* ptr3 = heap_alloc(600);
     void* spacer3 = heap_alloc(400);  // spacer to prevent coalescing
-    void* blk4 = heap_alloc(200);
+    void* ptr4 = heap_alloc(200);
 
     // Free to create holes of different sizes
-    heap_free(blk1); // 200 byte hole
-    heap_free(blk2); // 400 byte hole
-    heap_free(blk3); // 600 byte hole
-    heap_free(blk4); // 200 byte hole
+    heap_free(ptr1); // 200 byte hole
+    heap_free(ptr2); // 400 byte hole
+    heap_free(ptr3); // 600 byte hole
+    heap_free(ptr4); // 200 byte hole
 
     // Allocate a small block - worst fit should place it in the largest hole
-    void* test_blk = heap_alloc(100);
-    BlockHeader* header = (BlockHeader*)test_blk;
+    void* test_ptr5 = heap_alloc(100);
+    BlockHeader* ptr5_header = (BlockHeader*)test_ptr5;
 
     // Check that it chose the worst fit (600 byte hole)
-    if ((void*)header < blk3 || (void*)header >= blk4) TEST_FAILED();
+    if ((void*)ptr5_header < ptr3 || (void*)ptr5_header >= ptr4) TEST_FAILED();
 
     heap_free(spacer1);
     heap_free(spacer2);
     heap_free(spacer3);
-    heap_free(test_blk);
+    heap_free(ptr5_header);
 
     TEST_PASSED();
 }
 
 // Block Management Tests
+
+// Test block splitting and ensure that the remaining free block is still valid.
 void test_block_splitting() {
     reset_allocator();
 
@@ -430,6 +472,7 @@ void test_block_splitting() {
     TEST_PASSED();
 }
 
+// Test block coalescing by allocating and freeing blocks in a specific order.
 void test_block_coalescing() {
     reset_allocator();
 
@@ -455,6 +498,7 @@ void test_block_coalescing() {
     TEST_PASSED();
 }
 
+// Test defragmentation by creating a fragmented heap and then defragmenting it.
 void test_defragmentation() {
     reset_allocator();
 
@@ -490,6 +534,8 @@ void test_defragmentation() {
 }
 
 // Performance Tests
+
+// Test allocation performance by measuring time taken for multiple allocations and deallocations.
 void test_allocation_performance() {
     TEST_START();
     reset_allocator();
@@ -521,6 +567,7 @@ void test_allocation_performance() {
     TEST_PASSED();
 }
 
+// Compare the performance of different allocation strategies.
 void compare_allocation_strategies() {
     TEST_START();
     const int num_trials = 3;
@@ -588,12 +635,14 @@ void compare_allocation_strategies() {
 }
 
 // Utility Function Tests
+
+// Test heap statistics functions to ensure they return correct values.
 void test_heap_stats() {
     reset_allocator();
 
     // Initial state
-    assert(get_alloc_count() == 0);
-    assert(get_free_block_count() == 0);
+    if(get_alloc_count() != 0) TEST_FAILED();
+    if(get_free_block_count() != 0) TEST_FAILED();
 
     // Allocate some blocks
     void* ptr1 = heap_alloc(100);
@@ -601,17 +650,17 @@ void test_heap_stats() {
     void* ptr3 = heap_alloc(300);
 
     // Check stats
-    assert(get_alloc_count() == 3);
-    assert(get_free_block_count() == 0);
-    assert(get_used_heap_size() > 0);
+    if (get_alloc_count() != 3) TEST_FAILED();
+    if (get_free_block_count() != 0) TEST_FAILED();
+    if (get_used_heap_size() <= 0) TEST_FAILED();
 
     // Free a block
     heap_free(ptr2);
 
     // Check updated stats
-    assert(get_alloc_count() == 2);
-    assert(get_free_block_count() == 1);
-    assert(get_free_heap_size() > 0);
+    if (get_alloc_count() != 2) TEST_FAILED();
+    if (get_free_block_count() != 1) TEST_FAILED();
+    if (get_free_heap_size() <= 0) TEST_FAILED();
 
     // Free remaining blocks
     heap_free(ptr1);
@@ -620,6 +669,7 @@ void test_heap_stats() {
     TEST_PASSED();
 }
 
+// Test heap export functions to ensure they create valid files.
 void test_heap_export() {
     reset_allocator();
 
@@ -636,11 +686,11 @@ void test_heap_export() {
 
     // Just verify the files were created
     FILE* f1 = fopen("data/heap_state.txt", "r");
-    assert(f1 != NULL);
+    if (f1 == NULL) TEST_FAILED();
     fclose(f1);
 
     FILE* f2 = fopen("data/heap_state.json", "r");
-    assert(f2 != NULL);
+    if (f2 == NULL) TEST_FAILED();
     fclose(f2);
 
     // Clean up

@@ -1,3 +1,10 @@
+/**
+ * @file main.c
+ * @brief Main file for a simple memory allocator.
+ *
+ * This file contains the main function that demonstrates the usage of a custom memory allocator.
+ */
+
 #include <stdio.h>
 #include <string.h>
 #include "allocator.h"

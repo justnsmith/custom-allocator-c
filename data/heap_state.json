@@ -2,15 +2,15 @@
   "heap_layout": [
     {
       "block_index": 0,
-      "header_address": "0x1022d4020",
+      "header_address": "0x104b8c020",
       "total_size": 128,
       "data_size": 104,
       "state": "Free",
-      "next_block": "0x1022d40a0"
+      "next_block": "0x104b8c0a0"
     },
     {
       "block_index": 1,
-      "header_address": "0x1022d40a0",
+      "header_address": "0x104b8c0a0",
       "total_size": 224,
       "data_size": 200,
       "state": "Allocated",
