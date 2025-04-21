@@ -31,44 +31,44 @@ all: $(EXE) $(TEST_EXE) $(DEBUG_EXE) $(DEBUG_TEST_EXE)
 
 # Rule for source objects
 build/%.o: src/%.c
-	@mkdir -p $(OBJ_DIR)  # Ensure the build directory exists
-	@mkdir -p $(SRC_OBJ_DIR)  # Ensure the build/src directory exists
+	@mkdir -p $(OBJ_DIR)
+	@mkdir -p $(SRC_OBJ_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Rule for debug source objects
 build/debug/%.o: src/%.c
-	@mkdir -p $(DEBUG_DIR)  # Ensure the debug directory exists
-	@mkdir -p $(DEBUG_SRC_DIR)  # Ensure the debug/src directory exists
+	@mkdir -p $(DEBUG_DIR)
+	@mkdir -p $(DEBUG_SRC_DIR)
 	$(CC) $(CFLAGS) $(DEBUG_FLAGS) -c $< -o $@
 
 # Rule for test objects
 build/test/%.o: test/%.c
-	@mkdir -p $(TEST_OBJ_DIR)  # Ensure the build/test directory exists
+	@mkdir -p $(TEST_OBJ_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Rule for debug test objects
 build/debug/test/%.o: test/%.c
-	@mkdir -p $(DEBUG_TEST_DIR)  # Ensure the debug/test directory exists
+	@mkdir -p $(DEBUG_TEST_DIR)
 	$(CC) $(CFLAGS) $(DEBUG_FLAGS) -c $< -o $@
 
 # Main executable rule
 $(EXE): $(OBJ)
-	@mkdir -p $(OBJ_DIR)  # Ensure the build directory exists
+	@mkdir -p $(OBJ_DIR)
 	$(CC) $^ -o $@ $(LDFLAGS)
 
 # Debug executable rule
 $(DEBUG_EXE): $(DEBUG_OBJ)
-	@mkdir -p $(DEBUG_DIR)  # Ensure the debug directory exists
+	@mkdir -p $(DEBUG_DIR)
 	$(CC) $^ -o $@ $(LDFLAGS)
 
 # Test executable rule
 $(TEST_EXE): $(TEST_OBJ) build/allocator.o
-	@mkdir -p $(OBJ_DIR)  # Ensure the build directory exists
+	@mkdir -p $(OBJ_DIR)
 	$(CC) $^ -o $@ $(LDFLAGS)
 
 # Debug test executable rule
 $(DEBUG_TEST_EXE): $(DEBUG_TEST_OBJ) build/debug/allocator.o
-	@mkdir -p $(DEBUG_DIR)  # Ensure the debug directory exists
+	@mkdir -p $(DEBUG_DIR)
 	$(CC) $^ -o $@ $(LDFLAGS)
 
 # Custom rule for main program
@@ -91,7 +91,7 @@ test: $(TEST_EXE)
 debug_test: $(DEBUG_TEST_EXE)
 	./$(DEBUG_TEST_EXE)
 
-# Clean build artifacts
+# Clean build
 clean:
 	rm -rf $(OBJ_DIR)
 
