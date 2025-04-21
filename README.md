@@ -8,11 +8,13 @@ A custom memory allocator written in C from scratch that mimics standard memory 
 2. [File Structure](#file-structure)
 3. [Setup and Usage](#setup-and-usage)
    - [Build](#build)
-   - [Run](#run)
+   - [Run Main](#run-main)
    - [Run Tests](#run-tests)
-4. [Memory Layout](#memory-layout)
-5. [Testing](#testing)
-6. [Development Notes](#development-notes)
+4. [Testing](#testing)
+5. [Development Notes](#development-notes)
+    - [Memory Layout](#memory-layout-design)
+    - [Design Decisions](#design-decisions)
+    - [Performance Considerations](#performance-considerations)
 
 ## Features
 
@@ -52,7 +54,7 @@ cd custom-allocator-c
 make
 ```
 
-### Run
+### Run Main
 ```bash
 # Run the main program
 make run
@@ -69,3 +71,48 @@ make test
 # Run tests with debug flags enabled
 make debug_test
 ```
+## Testing
+
+The test suite in `test/allocator_test.c` includes comprehensive tests to verify the correct functioning of the memory allocator:
+
+- **Basic Operations**: Tests for `heap_alloc`, `heap_free`, and `heap_realloc` functionality
+- **Allocation Strategies**: Verifies correct behavior of First-Fit, Best-Fit, and Worst-Fit strategies
+- **Edge Cases**:
+  - Zero-size allocations
+  - NULL pointer handling
+  - Out-of-memory conditions
+  - Boundary alignments
+- **Performance**: Stress tests with repeated allocations and deallocations
+- **Memory Integrity**: Checks for proper block coalescing and prevention of memory leaks
+- **Error Handling**: Validates proper error reporting and recovery
+
+The test framework includes color-coded output for easy visual identification of passing and failing tests.
+
+## Development Notes
+
+### Memory Layout Design
+- **Block Header Structure**: Each memory block is prefixed with a header containing metadata:
+
+```c
+  typedef struct BlockHeader {
+      size_t size;
+      bool free;
+      struct BlockHeader* next;
+  } BlockHeader;
+```
+
+- Chose this 24 byte header over a 32 byte header which contains a prev pointer due to simplicity and memory effiency
+- Forward-only traversal trades some coalescing performance for the reduced overhead
+- Proper alignment ensures consistent memory access patterns
+
+### Design Decisions
+- **Static Heap**: Using a fixed memory region makes the allocator usable in embedded systems and educational purposes without OS memory management dependencies
+- **Alignment**: Chose 16 byte alignment since it satisfies common alignment requirements for most data types and ensures that allocated memory is compatible with standard C data strutures on modern 64-bit systems.
+- **Block Splitting**: When a large block is allocated, remaining space will be split into a new free block when benefical, this balances fragmentation against header overhead.
+
+### Performance Considerations
+- Memory coalescing during free operations keeps fragmentation manageable
+- Strategy selection impacts performance:
+    - First-Fit optimizes for allocation speed
+    - Best-Fit minimizes wasted space
+    - Worst-Fit reduces creation of unusably small fragments
