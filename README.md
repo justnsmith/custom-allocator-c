@@ -1,4 +1,5 @@
 # custom-allocator-c
+![GitHub release (latest by semver)](https://img.shields.io/github/v/release/justnsmith/custom-allocator-c)
 
 A custom memory allocator written in C from scratch that mimics standard memory management functions like `malloc`, `free`, and `realloc`. It features manual heap management, multiple allocation strategies (First-Fit, Best-Fit, Worst-Fit), and heap integrity checks.
 
