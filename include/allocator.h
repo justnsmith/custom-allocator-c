@@ -34,6 +34,7 @@ typedef enum {
     ALLOC_HEAP_OK,             // Heap Success
 } AllocatorStatus;
 
+extern char heap[HEAP_CAPACITY];
 extern BlockHeader* first_block;
 extern size_t heap_size;
 extern AllocationStrategy current_strategy;
@@ -43,9 +44,9 @@ size_t align(size_t alloc_size);
 void coalesce_blocks(BlockHeader* header);
 void* split_block(BlockHeader* block_ptr, size_t total_size);
 
-void* find_fit_first(size_t requested_size);
-void* find_fit_best(size_t requested_size);
-void* find_fit_worst(size_t requested_size);
+BlockHeader* find_fit_first(size_t requested_size);
+BlockHeader* find_fit_best(size_t requested_size);
+BlockHeader* find_fit_worst(size_t requested_size);
 
 void* heap_alloc(size_t requested_bytes);
 void heap_free(void* ptr);
