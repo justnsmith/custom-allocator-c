@@ -2,9 +2,8 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
-#include <assert.h>
-#include <pthread.h>
 #include <time.h>
+#include <assert.h>
 #include "allocator.h"
 
 #define ANSI_COLOR_RED     "\x1b[31m"
@@ -14,18 +13,13 @@
 #define ANSI_COLOR_MAGENTA "\x1b[35m"
 #define ANSI_COLOR_CYAN    "\x1b[36m"
 #define ANSI_COLOR_RESET   "\x1b[0m"
-#define NUM_THREADS 8
-#define ALLOCS_PER_THREAD 100
-#define MAX_ALLOC_SIZE 1024
 
+#define TEST_START() printf(ANSI_COLOR_YELLOW "[STARTING] " ANSI_COLOR_RESET "%s\n", __func__)
 #define TEST_PASSED() printf(ANSI_COLOR_GREEN "[PASSED] " ANSI_COLOR_RESET "%s\n", __func__)
-#define TEST_FAILED() printf(ANSI_COLOR_RED "[FAILED] " ANSI_COLOR_RESET "%s\n", __func__)
-#define TEST_START() printf(ANSI_COLOR_BLUE "[RUNNING] " ANSI_COLOR_RESET "%s\n", __func__)
-
-// Global variables for testing
-pthread_t threads[10];
-volatile int thread_errors = 0;
-volatile int thread_count = 0;
+#define TEST_FAILED() do { \
+    fprintf(stderr, ANSI_COLOR_RED "[FAILED] " ANSI_COLOR_RESET "%s (%s:%d)\n", __func__, __FILE__, __LINE__); \
+    return; \
+} while (0)
 
 // Helper functions
 void reset_allocator() {
@@ -36,37 +30,44 @@ void reset_allocator() {
     set_last_status(ALLOC_SUCCESS);
 }
 
-void verify_allocation(void *ptr, size_t expected_size) {
-    assert(ptr != NULL);
+bool verify_allocation(void *ptr, size_t expected_size) {
+    if (ptr == NULL) return false;
+
     BlockHeader *header = (BlockHeader*)ptr - 1;
-    assert(header->free == false);
-    assert(header->size >= expected_size + sizeof(BlockHeader));
+
+    if (header->free != false || header->size < expected_size + sizeof(BlockHeader)) {
+        return false;
+    }
+    else {
+        return true;
+    }
 }
 
 // Basic Functionality Tests
 void test_basic_allocation() {
-    TEST_START();
     reset_allocator();
 
     // Allocate a simple block
     void* ptr = heap_alloc(100);
-    assert(ptr != NULL);
-    verify_allocation(ptr, 100);
+    if (ptr == NULL) {
+        TEST_FAILED();
+    }
+
+    if (!verify_allocation(ptr, 100)) TEST_FAILED();
 
     // Check that we can write to and read from it
     memset(ptr, 'A', 100);
     for (int i = 0; i < 100; i++) {
-        assert(((char*)ptr)[i] == 'A');
+        if (((char*)ptr)[i] != 'A') TEST_FAILED();
     }
 
     heap_free(ptr);
-    assert(get_last_status() == ALLOC_SUCCESS);
+    if (get_last_status() != ALLOC_SUCCESS) TEST_FAILED();
 
     TEST_PASSED();
 }
 
 void test_multiple_allocations() {
-    TEST_START();
     reset_allocator();
 
     // Allocate multiple blocks of different sizes
@@ -76,29 +77,28 @@ void test_multiple_allocations() {
 
     for (int i = 0; i < 5; i++) {
         ptrs[i] = heap_alloc(sizes[i]);
-        assert(ptrs[i] != NULL);
-        verify_allocation(ptrs[i], sizes[i]);
+        if (ptrs[i] == NULL) TEST_FAILED();
+        if (!verify_allocation(ptrs[i], sizes[i])) TEST_FAILED();
         memset(ptrs[i], fill_chars[i], sizes[i]);
     }
 
     // Verify data integrity
     for (int i = 0; i < 5; i++) {
-        for (int j = 0; j < sizes[i]; j++) {
-            assert(((char*)ptrs[i])[j] == fill_chars[i]);
+        for (size_t j = 0; j < sizes[i]; j++) {
+            if (((char*)ptrs[i])[j] != fill_chars[i]) TEST_FAILED();
         }
     }
 
     // Free in reverse order
     for (int i = 4; i >= 0; i--) {
         heap_free(ptrs[i]);
-        assert(get_last_status() == ALLOC_SUCCESS);
+        if(get_last_status() != ALLOC_SUCCESS) TEST_FAILED();
     }
 
     TEST_PASSED();
 }
 
 void test_allocation_at_capacity() {
-    TEST_START();
     reset_allocator();
 
     // Calculate how much space is needed for one header
@@ -108,34 +108,33 @@ void test_allocation_at_capacity() {
     size_t max_alloc_size = HEAP_CAPACITY - header_size - 16;  // Leave a small buffer
     void* ptr = heap_alloc(max_alloc_size);
 
-    assert(ptr != NULL);
-    assert(get_last_status() == ALLOC_SUCCESS);
+    if (ptr == NULL) TEST_FAILED();
+    if (get_last_status() != ALLOC_SUCCESS) TEST_FAILED();
 
     // Try to allocate one more byte - should fail
     void* ptr2 = heap_alloc(1);
-    assert(ptr2 == NULL);
-    assert(get_last_status() == ALLOC_OUT_OF_MEMORY);
+    if (ptr2 != NULL) TEST_FAILED();
+    if (get_last_status() != ALLOC_OUT_OF_MEMORY) TEST_FAILED();
 
     heap_free(ptr);
     TEST_PASSED();
 }
 
 void test_reallocation() {
-    TEST_START();
     reset_allocator();
 
     // Allocate a block and fill it
     void* ptr1 = heap_alloc(100);
-    assert(ptr1 != NULL);
+    if (ptr1 == NULL) TEST_FAILED();
     memset(ptr1, 'X', 100);
 
     // Reallocate to larger size
     void* ptr2 = heap_realloc(ptr1, 200);
-    assert(ptr2 != NULL);
+    if(ptr2 == NULL) TEST_FAILED();
 
     // Verify data was preserved
     for (int i = 0; i < 100; i++) {
-        assert(((char*)ptr2)[i] == 'X');
+        if (((char*)ptr2)[i] != 'X') TEST_FAILED();
     }
 
     // Fill the expanded area
@@ -144,76 +143,71 @@ void test_reallocation() {
     // Reallocate to smaller size
     void* ptr3 = heap_realloc(ptr2, 50);
 
-    printf("got hereee\n");
-    assert(ptr3 != NULL);
+    if (ptr3 == NULL) TEST_FAILED();
 
     // Verify first 50 bytes preserved
     for (int i = 0; i < 50; i++) {
-        assert(((char*)ptr3)[i] == 'X');
+        if (((char*)ptr3)[i] != 'X') TEST_FAILED();
     }
 
     heap_free(ptr3);
-    assert(get_last_status() == ALLOC_SUCCESS);
+    if (get_last_status() != ALLOC_SUCCESS) TEST_FAILED();
 
     TEST_PASSED();
 }
 
 // Edge Cases Tests
 void test_zero_allocation() {
-    TEST_START();
     reset_allocator();
 
     // Test allocating 0 bytes
     void* ptr = heap_alloc(0);
-    assert(ptr == NULL);
+    if (ptr != NULL) TEST_FAILED();
 
     heap_free(ptr);
-    assert(get_last_status() == ALLOC_INVALID_FREE);
+    if (get_last_status() != ALLOC_INVALID_FREE) TEST_FAILED();
 
     TEST_PASSED();
 }
 
 void test_large_allocation() {
-    TEST_START();
     reset_allocator();
 
     // Test allocating a large block (half the heap)
     size_t half_heap = HEAP_CAPACITY / 2;
     void* ptr = heap_alloc(half_heap - sizeof(BlockHeader) - 100); // Leave some room for header
-    assert(ptr != NULL);
+    if (ptr == NULL) TEST_FAILED();
 
     heap_free(ptr);
-    assert(get_last_status() == ALLOC_SUCCESS);
+    if (get_last_status() != ALLOC_SUCCESS) TEST_FAILED();
 
     TEST_PASSED();
 }
 
 void test_too_large_allocation() {
-    TEST_START();
     reset_allocator();
 
     // Test allocating something larger than the heap
     void* ptr = heap_alloc(HEAP_CAPACITY + 1);
-    assert(ptr == NULL);
-    assert(get_last_status() == ALLOC_OUT_OF_MEMORY);
+    if (ptr != NULL) TEST_FAILED();
+    if (get_last_status() != ALLOC_OUT_OF_MEMORY) TEST_FAILED();
 
     TEST_PASSED();
 }
 
 void test_alignment() {
-    TEST_START();
     reset_allocator();
 
     // Test that allocations are properly aligned
     for (int i = 1; i <= 32; i++) {
         void* ptr = heap_alloc(i);
-        assert(ptr != NULL);
+        if (ptr == NULL) TEST_FAILED();
 
         // Adjust for the BlockHeader size
         uintptr_t user_data_ptr = (uintptr_t)ptr + sizeof(BlockHeader);
 
         // Check if the user data (after BlockHeader) is aligned
-        assert(user_data_ptr % ALIGNMENT == 0);  // Ensure alignment of the user data
+        if (user_data_ptr % ALIGNMENT != 0) TEST_FAILED();
 
         heap_free(ptr);
     }
@@ -222,26 +216,22 @@ void test_alignment() {
 }
 
 void test_maximum_fragmentation() {
-    TEST_START();
     reset_allocator();
 
-    // Create maximum fragmentation by allocating and freeing alternating blocks
     void* ptrs[100];
     for (int i = 0; i < 100; i++) {
         ptrs[i] = heap_alloc(64);
-        assert(ptrs[i] != NULL);
+        if (ptrs[i] == NULL) TEST_FAILED();
     }
 
-    // Free every other block
     for (int i = 0; i < 100; i += 2) {
         heap_free(ptrs[i]);
     }
 
-    // Check fragmentation ratio
     double frag = get_fragmentation_ratio();
-    printf("Fragmentation ratio: %.4f\n", frag);
 
-    // Free remaining blocks
+    if (frag < 0.0 || frag > 0.1) TEST_FAILED();
+
     for (int i = 1; i < 100; i += 2) {
         heap_free(ptrs[i]);
     }
@@ -251,31 +241,29 @@ void test_maximum_fragmentation() {
 
 // Error Handling Tests
 void test_invalid_free() {
-    TEST_START();
     reset_allocator();
 
     // Test freeing NULL pointer
     heap_free(NULL);
-    assert(get_last_status() == ALLOC_INVALID_FREE);
+    if (get_last_status() != ALLOC_INVALID_FREE) TEST_FAILED();
 
     // Test freeing pointer not from our heap
     int stack_var;
     heap_free(&stack_var);
-    assert(get_last_status() == ALLOC_HEAP_ERROR);
+    if (get_last_status() != ALLOC_HEAP_ERROR) TEST_FAILED();
 
     TEST_PASSED();
 }
 
 void test_double_free() {
-    TEST_START();
     reset_allocator();
 
     // Allocate and free the same pointer twice
     void* ptr = heap_alloc(100);
-    assert(ptr != NULL);
+    if (ptr == NULL) TEST_FAILED();
 
     heap_free(ptr);
-    assert(get_last_status() == ALLOC_SUCCESS);
+    if (get_last_status() != ALLOC_SUCCESS) TEST_FAILED();
 
     // This should mark the block as free but not cause an error
     // since we're just changing a flag
@@ -285,12 +273,11 @@ void test_double_free() {
 }
 
 void test_use_after_free() {
-    TEST_START();
     reset_allocator();
 
     // Allocate, free, then try to use the memory
     void* ptr = heap_alloc(100);
-    assert(ptr != NULL);
+    if (ptr == NULL) TEST_FAILED();
 
     heap_free(ptr);
 
@@ -302,7 +289,6 @@ void test_use_after_free() {
 }
 
 void test_heap_integrity() {
-    TEST_START();
     reset_allocator();
 
     // Allocate some blocks
@@ -311,7 +297,7 @@ void test_heap_integrity() {
     void* ptr3 = heap_alloc(300);
 
     // Check integrity
-    assert(check_heap_integrity());
+    if (!check_heap_integrity()) TEST_FAILED();
 
     // Free in random order
     heap_free(ptr2);
@@ -319,14 +305,13 @@ void test_heap_integrity() {
     heap_free(ptr3);
 
     // Check integrity again
-    assert(check_heap_integrity());
+    if (!check_heap_integrity()) TEST_FAILED();
 
     TEST_PASSED();
 }
 
 // Allocation Strategies Tests
 void test_first_fit_strategy() {
-    TEST_START();
     reset_allocator();
     set_allocation_strategy(FIRST_FIT);
 
@@ -343,7 +328,7 @@ void test_first_fit_strategy() {
     BlockHeader* header4 = (BlockHeader*)blk4 - 1;
 
     // In first-fit, this should be placed in the first free block (where blk2 was)
-    assert((void*)header4 >= blk1 && (void*)header4 < blk3);
+    if ((void*)header4 < blk1 || (void*)header4 >= blk3) TEST_FAILED();
 
     heap_free(blk1);
     heap_free(blk3);
@@ -353,7 +338,6 @@ void test_first_fit_strategy() {
 }
 
 void test_best_fit_strategy() {
-    TEST_START();
     reset_allocator();
     set_allocation_strategy(BEST_FIT);
 
@@ -365,31 +349,18 @@ void test_best_fit_strategy() {
     void* blk3 = heap_alloc(400);     // will be freed (400-byte hole)
     void* blk4 = heap_alloc(400);     // stay allocated
 
-    printf("HEAP\n");
-    print_heap();
-
     // Free blk1 and blk3 to create 400-byte hole
     heap_free(blk1);
     heap_free(blk2);
     heap_free(blk3);
     heap_free(blk4);
 
-    printf("HEAP 2\n");
-    print_heap();
-
     // Now allocate 200 bytes — BEST_FIT should choose the smallest suitable hole,
     // which is the ~100-byte leftover from blk2's realloc (likely ~104 due to alignment)
     void* test_blk2 = heap_alloc(200);
 
-    print_heap();
-
-    // Check that test_blk is located in the freed region created by realloc of blk2
-    BlockHeader* header = (BlockHeader*)test_blk2 - 1;
-
-    print_heap();
-
     // Assertion ensures it's within the region formerly held by blk2
-    assert((void*)test_blk2 >= (void*)blk2 && (void*)test_blk2 < (void*)spacer2);
+    if ((void*)test_blk2 < (void*)blk2 || (void*)test_blk2 >= (void*)spacer2) TEST_FAILED();
 
     // Cleanup
     heap_free(test_blk2);
@@ -400,7 +371,6 @@ void test_best_fit_strategy() {
 }
 
 void test_worst_fit_strategy() {
-    TEST_START();
     reset_allocator();
     set_allocation_strategy(WORST_FIT);
 
@@ -421,10 +391,10 @@ void test_worst_fit_strategy() {
 
     // Allocate a small block - worst fit should place it in the largest hole
     void* test_blk = heap_alloc(100);
-    BlockHeader* header = (BlockHeader*)test_blk - 1;
+    BlockHeader* header = (BlockHeader*)test_blk;
 
     // Check that it chose the worst fit (600 byte hole)
-    assert((void*)header >= blk3 && (void*)header < blk4);
+    if ((void*)header < blk3 || (void*)header >= blk4) TEST_FAILED();
 
     heap_free(spacer1);
     heap_free(spacer2);
@@ -436,25 +406,24 @@ void test_worst_fit_strategy() {
 
 // Block Management Tests
 void test_block_splitting() {
-    TEST_START();
     reset_allocator();
 
     // Allocate a large block
     void* ptr1 = heap_alloc(500);
-    assert(ptr1 != NULL);
+    if (ptr1 == NULL) TEST_FAILED();
 
     // Free it
     heap_free(ptr1);
 
     // Allocate a smaller block - should split the free block
     void* ptr2 = heap_alloc(100);
-    assert(ptr2 != NULL);
+    if (ptr2 == NULL) TEST_FAILED();
 
     // The free block count should be at least 1 (the remainder)
-    assert(get_free_block_count() >= 1);
+    if (get_free_block_count() < 1) TEST_FAILED();
 
     // There should be one allocated block
-    assert(get_alloc_count() == 1);
+    if (get_alloc_count() != 1) TEST_FAILED();
 
     heap_free(ptr2);
 
@@ -462,7 +431,6 @@ void test_block_splitting() {
 }
 
 void test_block_coalescing() {
-    TEST_START();
     reset_allocator();
 
     // Allocate three contiguous blocks
@@ -476,23 +444,18 @@ void test_block_coalescing() {
 
     // There should be one free block (coalesced)
     size_t free_count = get_free_block_count();
-    if (free_count != 1) {
-        printf("Expected 1 free block after coalescing, got %zu\n", free_count);
-    }
+    if (free_count != 1) TEST_FAILED();
 
     heap_free(ptr3);
 
     // Now all blocks should be coalesced
     free_count = get_free_block_count();
-    if (free_count != 1) {
-        printf("Expected 1 free block after complete coalescing, got %zu\n", free_count);
-    }
+    if (free_count != 1) TEST_FAILED();
 
     TEST_PASSED();
 }
 
 void test_defragmentation() {
-    TEST_START();
     reset_allocator();
 
     // Create a highly fragmented heap
@@ -516,8 +479,7 @@ void test_defragmentation() {
     size_t free_after = get_free_block_count();
 
     // There should be fewer free blocks after defragmentation
-    printf("Free blocks before: %zu, after: %zu\n", free_before, free_after);
-    assert(free_after <= free_before);
+    if (free_after > free_before) TEST_FAILED();
 
     // Free remaining blocks
     for (int i = 1; i < 20; i += 2) {
@@ -525,254 +487,6 @@ void test_defragmentation() {
     }
 
     TEST_PASSED();
-}
-
-// Multithreading Tests
-typedef struct {
-    int thread_id;
-    int error_count;
-    void* allocations[ALLOCS_PER_THREAD];
-    size_t alloc_sizes[ALLOCS_PER_THREAD];
-} ThreadData;
-
-// Function to fill and verify memory contents to detect corruption
-void fill_memory(void* ptr, size_t size, int thread_id) {
-    unsigned char fill_value = (unsigned char)(thread_id & 0xFF);
-    memset(ptr, fill_value, size);
-}
-
-int verify_memory(void* ptr, size_t size, int thread_id) {
-    unsigned char fill_value = (unsigned char)(thread_id & 0xFF);
-    unsigned char* bytes = (unsigned char*)ptr;
-    for (size_t i = 0; i < size; i++) {
-        if (bytes[i] != fill_value) {
-            return 0; // Memory corruption detected
-        }
-    }
-    return 1; // Memory intact
-}
-
-// Thread function for allocation test
-void* allocation_thread_func(void* arg) {
-    ThreadData* data = (ThreadData*)arg;
-    data->error_count = 0;
-
-    for (int i = 0; i < ALLOCS_PER_THREAD; i++) {
-        // Randomize allocation size between 32 and MAX_ALLOC_SIZE bytes
-        size_t size = 32 + (rand() % (MAX_ALLOC_SIZE - 32 + 1));
-        data->alloc_sizes[i] = size;
-
-        // Allocate memory using thread-safe allocation
-        void* ptr = thread_safe_alloc(size);
-        data->allocations[i] = ptr;
-
-        if (ptr == NULL) {
-            printf("Thread %d: allocation %d failed\n", data->thread_id, i);
-            data->error_count++;
-            continue;
-        }
-
-        // Fill memory with a pattern based on thread ID
-        fill_memory(ptr, size, data->thread_id);
-
-        // Add small delay to increase chance of thread interleaving
-        if (rand() % 10 == 0) {
-            struct timespec ts = {0, 100000}; // 100 microseconds
-            nanosleep(&ts, NULL);
-        }
-    }
-
-    // Verify memory contents before returning
-    for (int i = 0; i < ALLOCS_PER_THREAD; i++) {
-        if (data->allocations[i] != NULL) {
-            if (!verify_memory(data->allocations[i], data->alloc_sizes[i], data->thread_id)) {
-                printf("Thread %d: memory corruption detected in allocation %d\n",
-                       data->thread_id, i);
-                data->error_count++;
-            }
-        }
-    }
-
-    return NULL;
-}
-
-// Thread function for reallocation test
-void* reallocation_thread_func(void* arg) {
-    ThreadData* data = (ThreadData*)arg;
-    data->error_count = 0;
-
-    // First do initial allocations
-    for (int i = 0; i < ALLOCS_PER_THREAD; i++) {
-        size_t size = 32 + (rand() % (MAX_ALLOC_SIZE - 32 + 1));
-        data->alloc_sizes[i] = size;
-        data->allocations[i] = thread_safe_alloc(size);
-
-        if (data->allocations[i] == NULL) {
-            printf("Thread %d: initial allocation %d failed\n", data->thread_id, i);
-            data->error_count++;
-            continue;
-        }
-
-        fill_memory(data->allocations[i], size, data->thread_id);
-    }
-
-    // Now perform reallocations
-    for (int i = 0; i < ALLOCS_PER_THREAD; i++) {
-        if (data->allocations[i] == NULL) continue;
-
-        // Verify memory is still intact before reallocation
-        if (!verify_memory(data->allocations[i], data->alloc_sizes[i], data->thread_id)) {
-            printf("Thread %d: memory corruption detected before realloc %d\n",
-                   data->thread_id, i);
-            data->error_count++;
-        }
-
-        // Choose new size (bigger or smaller)
-        size_t new_size;
-        if (rand() % 2 == 0) {
-            // Grow
-            new_size = data->alloc_sizes[i] + (rand() % 512);
-        } else {
-            // Shrink (but not below 32 bytes)
-            new_size = data->alloc_sizes[i] - (rand() %
-                      (data->alloc_sizes[i] > 64 ? data->alloc_sizes[i] - 32 : 32));
-            if (new_size < 32) new_size = 32;
-        }
-
-        // Perform reallocation
-        void* new_ptr = thread_safe_realloc(data->allocations[i], new_size);
-
-        if (new_ptr == NULL) {
-            printf("Thread %d: reallocation %d failed\n", data->thread_id, i);
-            data->error_count++;
-            continue;
-        }
-
-        // Check if memory data was preserved for the smaller of the two sizes
-        size_t check_size = (new_size < data->alloc_sizes[i]) ? new_size : data->alloc_sizes[i];
-        if (!verify_memory(new_ptr, check_size, data->thread_id)) {
-            printf("Thread %d: memory corruption detected after realloc %d\n",
-                   data->thread_id, i);
-            data->error_count++;
-        }
-
-        // Update the allocation info and fill with the pattern again
-        data->allocations[i] = new_ptr;
-        data->alloc_sizes[i] = new_size;
-        fill_memory(new_ptr, new_size, data->thread_id);
-
-        // Add small delay occasionally
-        if (rand() % 10 == 0) {
-            struct timespec ts = {0, 100000}; // 100 microseconds
-            nanosleep(&ts, NULL);
-        }
-    }
-
-    return NULL;
-}
-
-void test_multithreaded_allocation() {
-    TEST_START();
-    reset_allocator();
-
-    pthread_t threads[NUM_THREADS];
-    ThreadData thread_data[NUM_THREADS];
-
-    // Initialize thread data
-    for (int i = 0; i < NUM_THREADS; i++) {
-        thread_data[i].thread_id = i;
-        thread_data[i].error_count = 0;
-        memset(thread_data[i].allocations, 0, sizeof(thread_data[i].allocations));
-    }
-
-    // Create threads
-    for (int i = 0; i < NUM_THREADS; i++) {
-        if (pthread_create(&threads[i], NULL, allocation_thread_func, &thread_data[i]) != 0) {
-            perror("pthread_create failed");
-            TEST_FAILED();
-            return;
-        }
-    }
-
-    // Wait for all threads to complete
-    for (int i = 0; i < NUM_THREADS; i++) {
-        pthread_join(threads[i], NULL);
-    }
-
-    // Check for errors and free any remaining allocations
-    int total_errors = 0;
-    for (int i = 0; i < NUM_THREADS; i++) {
-        total_errors += thread_data[i].error_count;
-
-        // Free allocations
-        for (int j = 0; j < ALLOCS_PER_THREAD; j++) {
-            if (thread_data[i].allocations[j] != NULL) {
-                thread_safe_free(thread_data[i].allocations[j]);
-            }
-        }
-    }
-
-    if (total_errors > 0) {
-        printf("Multithreaded allocation test detected %d errors\n", total_errors);
-        TEST_FAILED();
-    } else {
-        TEST_PASSED();
-    }
-}
-
-void test_multithreaded_reallocation() {
-    TEST_START();
-    reset_allocator();
-
-    pthread_t threads[NUM_THREADS];
-    ThreadData thread_data[NUM_THREADS];
-
-    // Initialize thread data
-    for (int i = 0; i < NUM_THREADS; i++) {
-        thread_data[i].thread_id = i;
-        thread_data[i].error_count = 0;
-        memset(thread_data[i].allocations, 0, sizeof(thread_data[i].allocations));
-    }
-
-    // Create threads
-    for (int i = 0; i < NUM_THREADS; i++) {
-        if (pthread_create(&threads[i], NULL, reallocation_thread_func, &thread_data[i]) != 0) {
-            perror("pthread_create failed");
-            TEST_FAILED();
-            return;
-        }
-    }
-
-    // Wait for all threads to complete
-    for (int i = 0; i < NUM_THREADS; i++) {
-        pthread_join(threads[i], NULL);
-    }
-
-    // Check for errors and free any remaining allocations
-    int total_errors = 0;
-    for (int i = 0; i < NUM_THREADS; i++) {
-        total_errors += thread_data[i].error_count;
-
-        // Free allocations
-        for (int j = 0; j < ALLOCS_PER_THREAD; j++) {
-            if (thread_data[i].allocations[j] != NULL) {
-                thread_safe_free(thread_data[i].allocations[j]);
-            }
-        }
-    }
-
-    // Also check heap integrity after multithreaded operations
-    if (!check_heap_integrity()) {
-        printf("Heap integrity compromised after multithreaded reallocation\n");
-        total_errors++;
-    }
-
-    if (total_errors > 0) {
-        printf("Multithreaded reallocation test detected %d errors\n", total_errors);
-        TEST_FAILED();
-    } else {
-        TEST_PASSED();
-    }
 }
 
 // Performance Tests
@@ -789,7 +503,7 @@ void test_allocation_performance() {
     start = clock();
     for (int i = 0; i < num_allocs; i++) {
         ptrs[i] = heap_alloc(64);
-        assert(ptrs[i] != NULL);
+        if (ptrs[i] == NULL) TEST_FAILED();
     }
     end = clock();
     cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
@@ -809,7 +523,6 @@ void test_allocation_performance() {
 
 void compare_allocation_strategies() {
     TEST_START();
-
     const int num_trials = 3;
     const int num_allocs = 500;
     const int num_sizes = 5;
@@ -876,7 +589,6 @@ void compare_allocation_strategies() {
 
 // Utility Function Tests
 void test_heap_stats() {
-    TEST_START();
     reset_allocator();
 
     // Initial state
@@ -909,7 +621,6 @@ void test_heap_stats() {
 }
 
 void test_heap_export() {
-    TEST_START();
     reset_allocator();
 
     // Create some heap state
@@ -939,8 +650,10 @@ void test_heap_export() {
 }
 
 int main(int argc, char* argv[]) {
+    (void)argc;
+    (void)argv;
     srand(time(NULL));
-    printf(ANSI_COLOR_MAGENTA "Starting Memory Allocator Tests\n" ANSI_COLOR_RESET);
+    printf(ANSI_COLOR_MAGENTA "Starting Memory Allocator Tests\n\n" ANSI_COLOR_RESET);
 
     // Basic Functionality Tests
     test_basic_allocation();
@@ -971,17 +684,13 @@ int main(int argc, char* argv[]) {
     test_block_coalescing();
     test_defragmentation();
 
-    // Multithreading Tests
-    //test_multithreaded_allocation();    // TODO
-    //test_multithreaded_reallocation(); // TODO
+    // Utility Function Tests
+    test_heap_stats();
+    test_heap_export();
 
     // Performance Tests
     test_allocation_performance();
     compare_allocation_strategies();
-
-    // Utility Function Tests
-    test_heap_stats();
-    test_heap_export();
 
     printf(ANSI_COLOR_MAGENTA "\nAll tests completed!\n" ANSI_COLOR_RESET);
     return 0;

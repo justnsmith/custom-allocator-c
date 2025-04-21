@@ -3,11 +3,16 @@
 #include <string.h>
 #include "allocator.h"
 
+#ifdef DEBUG
+    #define DEBUG_PRINT(...) printf(__VA_ARGS__)
+#else
+    #define DEBUG_PRINT(...)
+#endif
+
 char heap[HEAP_CAPACITY] __attribute__((aligned(16)));  // heap storage
 size_t heap_size = 0;                                   // tracks heap size
 BlockHeader* first_block = NULL;                        // first heap block
 AllocationStrategy current_strategy = FIRST_FIT;        // default strategy
-pthread_mutex_t heap_mutex = PTHREAD_MUTEX_INITIALIZER; // mutex initializer
 static AllocatorStatus last_status = ALLOC_SUCCESS;     // default status code
 
 size_t align(size_t alloc_size) {
@@ -19,15 +24,15 @@ size_t align(size_t alloc_size) {
 
 void coalesce_blocks(BlockHeader* header) {
     // Print debug info
-    printf("Attempting to coalesce block at %p, size: %zu\n", header, header->size);
+    DEBUG_PRINT("Attempting to coalesce block at %p, size: %zu\n", header, header->size);
 
     // Forward Coalescing
     BlockHeader* next = header->next;
     while (next != NULL && next->free == true) {
-        printf("Found next free block at %p, size: %zu\n", next, next->size);
+        DEBUG_PRINT("Found next free block at %p, size: %zu\n", next, next->size);
         header->size += next->size;
         header->next = next->next;
-        printf("Coalesced forward, new size: %zu\n", header->size);
+        DEBUG_PRINT("Coalesced forward, new size: %zu\n", header->size);
         next = header->next;
     }
 
@@ -41,18 +46,18 @@ void coalesce_blocks(BlockHeader* header) {
     }
 
     if (prev != NULL && prev->free == true) {
-        printf("Found previous free block at %p, size: %zu\n", prev, prev->size);
+        DEBUG_PRINT("Found previous free block at %p, size: %zu\n", prev, prev->size);
         prev->size += header->size;
         prev->next = header->next;
-        printf("Coalesced backward, new size: %zu\n", prev->size);
+        DEBUG_PRINT("Coalesced backward, new size: %zu\n", prev->size);
     }
 }
 
 void* split_block(BlockHeader* block_ptr, size_t total_size) {
-    printf("In split_block. Block size: %zu, Total size: %zu\n", block_ptr->size, total_size);
+    DEBUG_PRINT("In split_block. Block size: %zu, Total size: %zu\n", block_ptr->size, total_size);
 
     if (block_ptr == NULL) {
-        printf("Invalid block pointer.\n");
+        DEBUG_PRINT("Invalid block pointer.\n");
         set_last_status(ALLOC_INVALID_OPERATION);
         return NULL;
     }
@@ -60,7 +65,7 @@ void* split_block(BlockHeader* block_ptr, size_t total_size) {
     // Ensure enough space to split
     size_t aligned_size = align(total_size);
     if (block_ptr->size < aligned_size + sizeof(BlockHeader) + ALIGNMENT) {
-        printf("Not enough space to split the block. Block size: %zu, Total size needed: %zu\n",
+        DEBUG_PRINT("Not enough space to split the block. Block size: %zu, Total size needed: %zu\n",
                block_ptr->size, aligned_size + sizeof(BlockHeader) + ALIGNMENT);
         set_last_status(ALLOC_ERROR);
         return NULL;
@@ -73,7 +78,7 @@ void* split_block(BlockHeader* block_ptr, size_t total_size) {
     secondBox->size = block_ptr->size - aligned_size;
 
     if (secondBox->size <= sizeof(BlockHeader)) {
-        printf("Error: Second block size is too small: %zu\n", secondBox->size);
+        DEBUG_PRINT("Error: Second block size is too small: %zu\n", secondBox->size);
         set_last_status(ALLOC_ERROR);
         return NULL;
     }
@@ -87,7 +92,7 @@ void* split_block(BlockHeader* block_ptr, size_t total_size) {
     block_ptr->next = secondBox;
     block_ptr->free = false;
 
-    printf("Second block created at %p with size: %zu\n", secondBox, secondBox->size);
+    DEBUG_PRINT("Second block created at %p with size: %zu\n", secondBox, secondBox->size);
     return (void*)((char*)block_ptr + sizeof(BlockHeader));
 }
 
@@ -109,29 +114,29 @@ BlockHeader* find_fit_best(size_t requested_size) {
     BlockHeader* best_block = NULL;
     size_t best_size = SIZE_MAX;  // Start with maximum possible size
 
-    printf("\nLooking for best fit of size %zu\n", requested_size);
+    DEBUG_PRINT("\nLooking for best fit of size %zu\n", requested_size);
     while (curr_block != NULL) {
-        printf("Examining block at %p, size: %zu, free: %d\n",
+        DEBUG_PRINT("Examining block at %p, size: %zu, free: %d\n",
                curr_block, curr_block->size, curr_block->free);
 
         if (curr_block->free && curr_block->size >= requested_size) {
-            printf("  This block is suitable\n");
+            DEBUG_PRINT("  This block is suitable\n");
             // Find the smallest block that fits
             if (curr_block->size < best_size) {
                 best_block = curr_block;
                 best_size = curr_block->size;
-                printf("  New best block found: %p, size: %zu\n", best_block, best_size);
+                DEBUG_PRINT("  New best block found: %p, size: %zu\n", best_block, best_size);
             }
         }
         curr_block = curr_block->next;
     }
 
     if (best_block != NULL) {
-        printf("Best fit found: %p, size: %zu\n", best_block, best_block->size);
+        DEBUG_PRINT("Best fit found: %p, size: %zu\n", best_block, best_block->size);
         set_last_status(ALLOC_SUCCESS);
         return best_block;
     } else {
-        printf("No suitable block found\n");
+        DEBUG_PRINT("No suitable block found\n");
         set_last_status(ALLOC_OUT_OF_MEMORY);
         return NULL;
     }
@@ -154,7 +159,7 @@ BlockHeader* find_fit_worst(size_t requested_size) {
     }
     if (worst_block != NULL) {
         set_last_status(ALLOC_SUCCESS);
-        return worst_block + 1;
+        return worst_block;
     }
     else {
         set_last_status(ALLOC_OUT_OF_MEMORY);
@@ -197,7 +202,7 @@ void* heap_alloc(size_t requested_bytes) {
         }
 
         set_last_status(ALLOC_SUCCESS);
-        printf("Reused block at %p (%zu bytes)\n", found, found->size);
+        DEBUG_PRINT("Reused block at %p (%zu bytes)\n", found, found->size);
         return (void*)((char*)found + sizeof(BlockHeader));
     }
 
@@ -234,7 +239,7 @@ void* heap_alloc(size_t requested_bytes) {
     heap_size += total_size;
 
     set_last_status(ALLOC_SUCCESS);
-    printf("Allocated new block of %zu bytes at %p\n", total_size, result);
+    DEBUG_PRINT("Allocated new block of %zu bytes at %p\n", total_size, result);
     return (void*)((char*)new_block + sizeof(BlockHeader));
 }
 
@@ -250,7 +255,7 @@ void heap_free(void* ptr) {
     }
 
     BlockHeader* header = (BlockHeader*)((char*)ptr - sizeof(BlockHeader));
-    printf("Freeing block at %p, size: %zu\n", header, header->size);
+    DEBUG_PRINT("Freeing block at %p, size: %zu\n", header, header->size);
 
     header->free = true;
 
@@ -291,7 +296,7 @@ void* heap_realloc(void* ptr, size_t new_size) {
             curr->size = total_new_size;
             curr->next = new_block;
 
-            printf("Split during realloc: created free block at %p with size %zu\n", new_block, new_block->size);
+            DEBUG_PRINT("Split during realloc: created free block at %p with size %zu\n", new_block, new_block->size);
         }
 
         set_last_status(ALLOC_SUCCESS);
@@ -316,7 +321,7 @@ void* heap_realloc(void* ptr, size_t new_size) {
             curr->size = total_new_size;
             curr->next = new_block;
 
-            printf("Split after coalesce in realloc: created free block at %p with size %zu\n", new_block, new_block->size);
+            DEBUG_PRINT("Split after coalesce in realloc: created free block at %p with size %zu\n", new_block, new_block->size);
         }
 
         set_last_status(ALLOC_SUCCESS);
@@ -342,29 +347,7 @@ void* heap_realloc(void* ptr, size_t new_size) {
     return new_ptr;
 }
 
-void* thread_safe_alloc(size_t requested_bytes) {
-    pthread_mutex_lock(&heap_mutex);
-    void* ptr = heap_alloc(requested_bytes);
-    pthread_mutex_unlock(&heap_mutex);
-    return ptr;
-}
-
-void thread_safe_free(void* ptr) {
-    pthread_mutex_lock(&heap_mutex);
-    heap_free(ptr);
-    pthread_mutex_unlock(&heap_mutex);
-}
-
-void* thread_safe_realloc(void* ptr, size_t new_size) {
-    pthread_mutex_lock(&heap_mutex);
-    void* new_ptr = heap_realloc(ptr, new_size);
-    pthread_mutex_unlock(&heap_mutex);
-    return new_ptr;
-}
-
 bool check_heap_integrity() {
-    pthread_mutex_lock(&heap_mutex);
-
     BlockHeader* visited[HEAP_CAPACITY / sizeof(BlockHeader)];
     size_t visited_count = 0;
 
@@ -376,7 +359,6 @@ bool check_heap_integrity() {
         // Check if we've already seen this block (cycle)
         for (size_t i = 0; i < visited_count; ++i) {
             if (visited[i] == curr_block) {
-                pthread_mutex_unlock(&heap_mutex);
                 set_last_status(ALLOC_HEAP_ERROR);
                 return false;
             }
@@ -387,14 +369,12 @@ bool check_heap_integrity() {
             visited[visited_count++] = curr_block;
         }
         else {
-            pthread_mutex_unlock(&heap_mutex);
             set_last_status(ALLOC_HEAP_ERROR);
             return false;
         }
 
         // Check size
         if (curr_block->size == 0 || curr_block->size % ALIGNMENT != 0) {
-            pthread_mutex_unlock(&heap_mutex);
             set_last_status(ALLOC_ALIGNMENT_ERROR);
             return false;
         }
@@ -402,35 +382,30 @@ bool check_heap_integrity() {
         // Check block boundaries
         void* curr_block_end = (void*)curr_block + curr_block->size;
         if ((void*)curr_block < heap_start || curr_block_end > heap_end) {
-            pthread_mutex_unlock(&heap_mutex);
             set_last_status(ALLOC_HEAP_ERROR);
             return false;
         }
 
         // Check for adjacent free blocks (these should have been coalesced)
         if (curr_block->free == true && curr_block->next != NULL && curr_block->next->free == true) {
-            pthread_mutex_unlock(&heap_mutex);
             set_last_status(ALLOC_HEAP_ERROR);
             return false;
         }
         curr_block = curr_block->next;
     }
-    pthread_mutex_unlock(&heap_mutex);
     set_last_status(ALLOC_HEAP_OK);
     return true;
 }
 
 bool validate_pointer(void* ptr) {
-    pthread_mutex_lock(&heap_mutex);
     uintptr_t start = (uintptr_t) heap;
     uintptr_t end   = (uintptr_t) heap_size;
     uintptr_t p     = (uintptr_t) ptr;
-    pthread_mutex_unlock(&heap_mutex);
-    return (p >= start && p < start + end);
+    bool result = (p >= start && p < start + end);
+    return result;
 }
 
 void defragment_heap() {
-    pthread_mutex_lock(&heap_mutex);
     BlockHeader* curr_block = first_block;
 
     while (curr_block != NULL && curr_block->next != NULL) {
@@ -441,19 +416,14 @@ void defragment_heap() {
             curr_block = curr_block->next;
         }
     }
-    pthread_mutex_unlock(&heap_mutex);
 }
 
 void set_last_status(AllocatorStatus status) {
-    pthread_mutex_lock(&heap_mutex);
     last_status = status;
-    pthread_mutex_unlock(&heap_mutex);
 }
 
 void set_allocation_strategy(AllocationStrategy strategy) {
-    pthread_mutex_lock(&heap_mutex);
     current_strategy = strategy;
-    pthread_mutex_unlock(&heap_mutex);
 }
 
 size_t get_alloc_count() {
@@ -525,14 +495,11 @@ double get_fragmentation_ratio() {
 
 
 AllocatorStatus get_last_status() {
-    pthread_mutex_lock(&heap_mutex);
     AllocatorStatus status = last_status;
-    pthread_mutex_unlock(&heap_mutex);
     return status;
 }
 
 void print_heap() {
-    pthread_mutex_lock(&heap_mutex);
     BlockHeader* curr = first_block;
     int i = 0;
     printf("Heap Layout:\n");
@@ -546,8 +513,6 @@ void print_heap() {
         curr = curr->next;
     }
     printf("End of Heap\n");
-
-    pthread_mutex_unlock(&heap_mutex);
 }
 
 void save_heap_state(const char* filename) {
@@ -558,8 +523,6 @@ void save_heap_state(const char* filename) {
         fprintf(stderr, "Error: Unable to open file: %s for writing.\n", filename);
         return;
     }
-
-    pthread_mutex_lock(&heap_mutex);
 
     BlockHeader* curr = first_block;
     int i = 0;
@@ -575,8 +538,6 @@ void save_heap_state(const char* filename) {
     }
     fprintf(fptr, "End of Heap\n");
 
-    pthread_mutex_unlock(&heap_mutex);
-
     fclose(fptr);
 }
 
@@ -586,8 +547,6 @@ void export_heap_json(const char* filename) {
         fprintf(stderr, "Error: Unable to open file: %s for writing.\n", filename);
         return;
     }
-
-    pthread_mutex_lock(&heap_mutex);
 
     fprintf(fptr, "{\n");
     fprintf(fptr, "  \"heap_layout\": [\n");
@@ -624,8 +583,6 @@ void export_heap_json(const char* filename) {
     fprintf(fptr, "    \"fragmentation_ratio\": %.4f\n", get_fragmentation_ratio());
     fprintf(fptr, "  }\n");
     fprintf(fptr, "}\n");
-
-    pthread_mutex_unlock(&heap_mutex);
 
     fclose(fptr);
 }

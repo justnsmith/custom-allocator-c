@@ -3,7 +3,6 @@
 
 #include <stddef.h>
 #include <stdbool.h>
-#include <pthread.h>
 
 // Total capacity of simulated heap (in bytes)
 #define HEAP_CAPACITY 640000
@@ -38,7 +37,6 @@ extern char heap[HEAP_CAPACITY];
 extern BlockHeader* first_block;
 extern size_t heap_size;
 extern AllocationStrategy current_strategy;
-extern pthread_mutex_t heap_mutex;
 
 size_t align(size_t alloc_size);
 void coalesce_blocks(BlockHeader* header);
@@ -51,10 +49,6 @@ BlockHeader* find_fit_worst(size_t requested_size);
 void* heap_alloc(size_t requested_bytes);
 void heap_free(void* ptr);
 void* heap_realloc(void* ptr, size_t new_size);
-
-void* thread_safe_alloc(size_t requested_bytes);
-void thread_safe_free(void* ptr);
-void* thread_safe_realloc(void* ptr, size_t new_size);
 
 bool check_heap_integrity();
 bool validate_pointer(void* ptr);
