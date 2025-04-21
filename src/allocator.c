@@ -457,7 +457,6 @@ void set_allocation_strategy(AllocationStrategy strategy) {
 }
 
 size_t get_alloc_count() {
-    pthread_mutex_lock(&heap_mutex);
     size_t count = 0;
     BlockHeader* curr_block = first_block;
     while (curr_block != NULL) {
@@ -466,13 +465,10 @@ size_t get_alloc_count() {
         }
         curr_block = curr_block->next;
     }
-    pthread_mutex_unlock(&heap_mutex);
     return count;
 }
 
 size_t get_free_block_count() {
-    pthread_mutex_lock(&heap_mutex);
-
     size_t count = 0;
     BlockHeader* curr_block = first_block;
     while (curr_block != NULL) {
@@ -481,26 +477,20 @@ size_t get_free_block_count() {
         }
         curr_block = curr_block->next;
     }
-    pthread_mutex_unlock(&heap_mutex);
     return count;
 }
 
 size_t get_used_heap_size() {
-    pthread_mutex_lock(&heap_mutex);
-
     size_t size = 0;
     BlockHeader* curr_block = first_block;
     while (curr_block != NULL) {
         size += curr_block->size;
         curr_block = curr_block->next;
     }
-    pthread_mutex_unlock(&heap_mutex);
     return size;
 }
 
 size_t get_free_heap_size() {
-    pthread_mutex_lock(&heap_mutex);
-
     size_t size = 0;
     BlockHeader* curr_block = first_block;
     while (curr_block != NULL) {
@@ -509,13 +499,10 @@ size_t get_free_heap_size() {
         }
         curr_block = curr_block->next;
     }
-    pthread_mutex_unlock(&heap_mutex);
     return size;
 }
 
 double get_fragmentation_ratio() {
-    pthread_mutex_lock(&heap_mutex);
-
     size_t free_block_count = 0;
     size_t total_free_size = 0;
 
@@ -527,8 +514,6 @@ double get_fragmentation_ratio() {
         }
         curr_block = curr_block->next;
     }
-
-    pthread_mutex_unlock(&heap_mutex);
 
     if (free_block_count == 0 || total_free_size == 0) {
         return 0.0;
@@ -605,7 +590,7 @@ void export_heap_json(const char* filename) {
     pthread_mutex_lock(&heap_mutex);
 
     fprintf(fptr, "{\n");
-    fprintf(fptr, " . \"heap_layout\": [\n");
+    fprintf(fptr, "  \"heap_layout\": [\n");
 
     BlockHeader* curr_block = first_block;
     int block_index = 0;
@@ -638,7 +623,6 @@ void export_heap_json(const char* filename) {
     fprintf(fptr, "    \"free_heap_size\": %zu,\n", get_free_heap_size());
     fprintf(fptr, "    \"fragmentation_ratio\": %.4f\n", get_fragmentation_ratio());
     fprintf(fptr, "  }\n");
-
     fprintf(fptr, "}\n");
 
     pthread_mutex_unlock(&heap_mutex);

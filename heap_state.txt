@@ -1,0 +1,14 @@
+Heap Layout:
+Block 0:
+  Block Header Address: 0x102d980b0
+  Block Total Size: 128 bytes
+  Block Data Size: 104 bytes
+  Block State: Free
+
+Block 1:
+  Block Header Address: 0x102d98130
+  Block Total Size: 224 bytes
+  Block Data Size: 200 bytes
+  Block State: Allocated
+
+End of Heap
