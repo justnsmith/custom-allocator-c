@@ -629,17 +629,17 @@ void test_heap_export() {
     heap_free(ptr1);
 
     // Export as text
-    save_heap_state("heap_state.txt");
+    save_heap_state("data/heap_state.txt");
 
     // Export as JSON
-    export_heap_json("heap_state.json");
+    export_heap_json("data/heap_state.json");
 
     // Just verify the files were created
-    FILE* f1 = fopen("heap_state.txt", "r");
+    FILE* f1 = fopen("data/heap_state.txt", "r");
     assert(f1 != NULL);
     fclose(f1);
 
-    FILE* f2 = fopen("heap_state.json", "r");
+    FILE* f2 = fopen("data/heap_state.json", "r");
     assert(f2 != NULL);
     fclose(f2);
 
