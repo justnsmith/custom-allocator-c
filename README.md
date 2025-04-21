@@ -40,7 +40,7 @@ A custom memory allocator written in C from scratch that mimics standard memory 
 │   ├── allocator.c      # Implementation of the memory allocator
 │   └── main.c           # Main application entry point
 └── test/
-└── allocator_test.c     # Tests for the allocator implementation
+    └── allocator_test.c # Tests for the allocator implementation
 ```
 
 ## Setup and Usage
