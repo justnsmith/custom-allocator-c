@@ -12,7 +12,8 @@ A custom memory allocator written in C from scratch that mimics standard memory 
    - [Run Main](#run-main)
    - [Run Tests](#run-tests)
 4. [Testing](#testing)
-5. [Development Notes](#development-notes)
+5. [Benchmarks](#benchmarks)
+6. [Development Notes](#development-notes)
     - [Memory Layout](#memory-layout-design)
     - [Design Decisions](#design-decisions)
     - [Performance Considerations](#performance-considerations)
@@ -72,6 +73,7 @@ make test
 # Run tests with debug flags enabled
 make debug_test
 ```
+
 ## Testing
 
 The test suite in `test/allocator_test.c` includes comprehensive tests to verify the correct functioning of the memory allocator:
@@ -88,6 +90,19 @@ The test suite in `test/allocator_test.c` includes comprehensive tests to verify
 - **Error Handling**: Validates proper error reporting and recovery
 
 The test framework includes color-coded output for easy visual identification of passing and failing tests.
+
+## Benchmarks
+
+The benchmark suite tests all three allocation strategies across different workloads:
+- Sequential allocation (1000 blocks)
+- Random size allocation (varying 32-512 byte blocks)
+- Fragmentation analysis (mixed alloc/free patterns)
+- Allocation/deallocation cycles
+- Reallocation performance (growing blocks from 64 to 1024 bytes)
+- Worst-case scenarios (pathological patterns)
+- Memory efficiency (overhead and utilization)
+
+Results show Worst-Fit consistently outperforms the others in allocation speed, hitting ~677k ops/sec for sequential allocations compared to First-Fit's ~440k. Fragmentation stays nearly identical across all strategies (0.0055-0.0066 ratio), and memory overhead is the same at 18.82% regardless of strategy. In practice, the choice between strategies matters less than expected since coalescing works well across the board.
 
 ## Development Notes
 
