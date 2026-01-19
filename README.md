@@ -76,20 +76,19 @@ make debug_test
 
 ## Testing
 
-The test suite in `test/allocator_test.c` includes comprehensive tests to verify the correct functioning of the memory allocator:
+The enhanced test suite includes 40+ comprehensive tests covering basic functionality, edge cases, and stress scenarios:
 
-- **Basic Operations**: Tests for `heap_alloc`, `heap_free`, and `heap_realloc` functionality
-- **Allocation Strategies**: Verifies correct behavior of First-Fit, Best-Fit, and Worst-Fit strategies
-- **Edge Cases**:
-  - Zero-size allocations
-  - NULL pointer handling
-  - Out-of-memory conditions
-  - Boundary alignments
-- **Performance**: Stress tests with repeated allocations and deallocations
-- **Memory Integrity**: Checks for proper block coalescing and prevention of memory leaks
-- **Error Handling**: Validates proper error reporting and recovery
+- **Basic Operations**: Allocation, deallocation, and reallocation with various sizes
+- **Allocation Strategies**: Verifies First-Fit, Best-Fit, and Worst-Fit behavior and performance
+- **Edge Cases**: Zero-size allocations, NULL pointers, out-of-memory conditions, single-byte allocations, power-of-two sizes, prime number sizes
+- **Reallocation**: Growing/shrinking blocks, in-place vs relocation, adjacent free block merging
+- **Coalescing**: Tests for merging adjacent free blocks in various patterns (sequential, checkerboard, complete heap)
+- **Error Handling**: Invalid frees, double frees, use-after-free detection, heap boundary violations
+- **Memory Integrity**: Block overlap detection, data preservation during coalescing, heap corruption checks
+- **Stress Tests**: Random operations (500+ mixed alloc/free), allocation until capacity, high-frequency cycling
+- **Performance**: Timing comparisons between strategies under different workloads
 
-The test framework includes color-coded output for easy visual identification of passing and failing tests.
+The test framework uses color-coded output (green for pass, red for fail) and includes performance measurements showing allocation/deallocation speeds.
 
 ## Benchmarks
 
